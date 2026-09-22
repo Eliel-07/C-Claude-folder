@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מעקב משלוחים מתח נמוך</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --border:#e3e7ee; --text:#1f2937; --muted:#6b7280;
+    --blue:#2563eb; --blue-bg:#eaf1fe;
+    --amber:#b45309; --amber-bg:#fef3e0;
+    --purple:#7c3aed; --purple-bg:#f2eafe;
+    --green:#15803d; --green-bg:#e7f7ec;
+    --red:#dc2626; --red-bg:#fdeaea;
+    --shadow:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Arial,sans-serif;padding:24px;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:20px;}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;box-shadow:var(--shadow);}
+  .kpi .num{font-size:26px;font-weight:700;}
+  .kpi .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
+  .kpi.pending .num{color:var(--amber);}
+  .kpi.collected .num{color:var(--blue);}
+  .kpi.transit .num{color:var(--purple);}
+  .kpi.arrived .num{color:var(--green);}
+  .kpi.overdue .num{color:var(--red);}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+  .tabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px;box-shadow:var(--shadow);}
+  .tab{padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--muted);user-select:none;}
+  .tab.active{background:var(--blue);color:#fff;}
+  #search{flex:1;min-width:220px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);font-size:14px;background:var(--card);box-shadow:var(--shadow);}
+  #search:focus{outline:2px solid var(--blue);}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
+  .table-scroll{overflow-x:auto;}
+  table{width:100%;min-width:520px;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:right;padding:10px 12px;background:#f8f9fb;border-bottom:1px solid var(--border);color:var(--muted);font-weight:600;font-size:12px;white-space:nowrap;}
+  td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tr.row:hover{background:#fafbfd;cursor:pointer;}
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap;}
+  .badge.pending{background:var(--amber-bg);color:var(--amber);}
+  .badge.collected{background:var(--blue-bg);color:var(--blue);}
+  .badge.transit{background:var(--purple-bg);color:var(--purple);}
+  .badge.arrived{background:var(--green-bg);color:var(--green);}
+  .method{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);}
+  .pl{font-weight:700;}
+  .muted{color:var(--muted);font-size:12px;}
+  .overdue-tag{color:var(--red);font-weight:600;font-size:12px;}
+  .detail-row td{background:#fafbfd;padding:0;}
+  .detail-wrap{padding:12px 16px 16px 16px;}
+  .detail-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .detail-table th{background:#f0f2f6;font-size:11px;}
+  .detail-table td,.detail-table th{padding:6px 10px;border-bottom:1px solid #eceff3;}
+  .empty{padding:40px;text-align:center;color:var(--muted);}
+  footer{margin-top:20px;color:var(--muted);font-size:12px;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<h1>מעקב משלוחים מתח נמוך</h1>
+<div class="sub">חיפוש לפי מספר פקינג ליסט, מק"ט, מספר הזמנת רכש או מספר DELIVERY</div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="toolbar">
+  <div class="tabs">
+    <div class="tab active" data-tab="active">פעילים</div>
+    <div class="tab" data-tab="history">היסטוריה</div>
+  </div>
+  <input id="search" type="text" placeholder="חיפוש: פקינג ליסט / מק&quot;ט / הזמנת רכש / DELIVERY ...">
+</div>
+
+<div class="card">
+ <div class="table-scroll">
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th></th>
+        <th>פקינג ליסט</th>
+        <th>שיטת הובלה</th>
+        <th>סטטוס</th>
+        <th>תאריך הגעה משוער</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+ </div>
+  <div class="empty" id="emptyMsg" style="display:none;">אין רשומות תואמות</div>
+</div>
+
+<footer>
+  הכלי מתעדכן ידנית: שורה חדשה נוספת עם כל פקינג ליסט שמועבר, והסטטוס מתעדכן לפי עדכונים בצ'אט (נאסף / בדרך לישראל / הגיע).
+  תאריך הגעה משוער: בהטסה 10 ימים וים 21 ימים מהתאריך שבו עודכן כי המשלוח "בדרך לישראל"; באקספרס 7 ימים מתאריך האיסוף.
+  שורות שהגיעו עוברות אוטומטית ללשונית ההיסטוריה 7 ימים לאחר סטטוס "הגיע".
+</footer>
+
+<script>
+// ---- שיטות הובלה וסטטוסים ----
+const METHOD_LABELS = { air:"הטסה", express:"אקספרס", sea:"ים" };
+const METHOD_DAYS   = { air:10, express:7, sea:21 };
+const STATUS_LABELS = { pending:"ממתין לאיסוף", collected:"נאסף", transit:"בדרך לישראל", arrived:"הגיע" };
+const ARCHIVE_AFTER_DAYS = 7;
+
+// ---- נתונים ----
+// כל רשומה = פקינג ליסט אחד. pos = כל שורות המק"ט/כמות/הזמנת רכש/DELIVERY בתוך הפקינג ליסט (מאוחדות).
+const RECORDS = [
+  {
+    pl: "48767433",
+    addedDate: "2026-09-15",
+    plDocDate: "2026-03-09",
+    supplier: "Eaton Industries GmbH",
+    invoice: "4937547534",
+    method: "air",
+    status: "transit",
+    statusDates: { pending: "2026-09-15", collected: "2026-09-05", transit: "2026-09-05", arrived: null },
+    packages: 8,
+    grossWeight: 77.472,
+    pos: [
+      { sku:"Y7-110300", desc:"NZMC3-A400-BT", qty:6,  unit:"EA", po:"PO26001149", delivery:"8818911903" },
+      { sku:"Y7-110219", desc:"NZMC2-A160-BT", qty:2,  unit:"EA", po:"PO26001142", delivery:"8818870152" },
+      { sku:"Y7-102270", desc:"FAZ-D16/3-NA",  qty:40, unit:"EA", po:"PO26001254", delivery:"8818829263" },
+      { sku:"Y7-52999",  desc:"SVB-P3",        qty:2,  unit:"EA", po:null,         delivery:"8818829263" },
+      { sku:"Y7-286054", desc:"FAZ-XHIN11",    qty:10, unit:"EA", po:null,         delivery:"8818829263" },
+      { sku:"Y7-216540", desc:"M22-I6",        qty:10, unit:"EA", po:"PO26001025", delivery:"8818786563" },
+      { sku:"Y7-262240", desc:"NZM2-160-XKC",  qty:10, unit:"EA", po:"PO26001025", delivery:"8818786563" },
+      { sku:"Y7-216540", desc:"M22-I6",        qty:12, unit:"EA", po:null,         delivery:"8818786563" },
+      { sku:"Y7-235442", desc:"PFIM-40/4/05-A-MW", qty:2, unit:"EA", po:"PO26001025", delivery:"8818745704" },
+      { sku:"Y7-281198", desc:"DILM65-XMV",    qty:5,  unit:"EA", po:"PO26001025", delivery:"8818745704" },
+      { sku:"Y7-260125", desc:"NZM1-XDV",      qty:1,  unit:"EA", po:"PO26001025", delivery:"8818760036" },
+      { sku:"Y7-82884",  desc:"NHI-E-10-PKZ0", qty:8,  unit:"EA", po:"PO26001149", delivery:"8818760036" }
+    ]
+  },
+  {
+    pl: "48779123",
+    addedDate: "2026-09-15",
+    plDocDate: "2026-03-09",
+    supplier: "Eaton Industries GmbH",
+    invoice: "4937547535",
+    method: "air",
+    status: "collected",
+    statusDates: { pending: "2026-09-15", collected: "2026-09-05", transit: null, arrived: null },
+    packages: 2,
+    grossWeight: 330.000,
+    pos: [
+      { sku:"Y7-102210", desc:"FAZ-C16/2-RT",  qty:2,   unit:"EA", po:"PO26001025", delivery:"8818884214" },
+      { sku:"Y7-102250", desc:"FAZ-C16/3-NA",  qty:114, unit:"EA", po:"PO26001123", delivery:"8818884214" },
+      { sku:"Y7-102250", desc:"FAZ-C16/3-NA",  qty:48,  unit:"EA", po:"PO26001253", delivery:"8818884214" },
+      { sku:"Y7-107670", desc:"DILM72(230V50HZ,240V60HZ)", qty:2, unit:"EA", po:null, delivery:"8818884214" },
+      { sku:"Y7-95720",  desc:"T5-4-88/E",     qty:2,   unit:"EA", po:"PO26001025", delivery:"8818884214" },
+      { sku:"Y7-92012",  desc:"T5B-4-88/E",    qty:2,   unit:"EA", po:"PO26001025", delivery:"8818884214" },
+      { sku:"Y7-199892", desc:"P1-40/E/SVB",   qty:56,  unit:"EA", po:"PO26001142", delivery:"8818884214" },
+      { sku:"Y7-225325", desc:"CI-K2-T3-4",    qty:10,  unit:"EA", po:"PO26001154", delivery:"8818897586" },
+      { sku:"Y7-110197", desc:"P1-25/E/SVB",   qty:336, unit:"EA", po:"PO26001142", delivery:"8818897586" },
+      { sku:"Y7-27012",  desc:"T0-2-1/EZ",     qty:122, unit:"EA", po:"PO26001142", delivery:"8818897586" },
+      { sku:"Y7-110299", desc:"NZMC3-A320-BT", qty:7,   unit:"EA", po:"PO26001142", delivery:"8818897586" },
+      { sku:"Y7-95720",  desc:"T5-4-88/E",     qty:3,   unit:"EA", po:"PO26001149", delivery:"8818897586" },
+      { sku:"Y7-216388", desc:"M22-B",         qty:81,  unit:"EA", po:"PO26001312", delivery:"8818897586" },
+      { sku:"Y7-216772", desc:"M22-L-R",       qty:12,  unit:"EA", po:"PO26001312", delivery:"8818897586" },
+      { sku:"Y7-239480", desc:"DILM95(230V50HZ,240V60HZ)", qty:3, unit:"EA", po:"PO26001312", delivery:"8818897586" },
+      { sku:"Y7-277830", desc:"DILM50(230V50HZ,240V60HZ)", qty:12, unit:"EA", po:"PO26001312", delivery:"8818897586" },
+      { sku:"Y7-278561", desc:"FAZ-C16/1",     qty:487, unit:"EA", po:"PO26001119", delivery:"8818897586" }
+    ]
+  },
+  {
+    pl: "48767434",
+    addedDate: "2026-09-15",
+    plDocDate: "2026-08-25",
+    supplier: "Eaton Industries GmbH",
+    invoice: null,
+    method: "express",
+    status: "transit",
+    statusDates: { pending: "2026-09-15", collected: "2026-09-15", transit: "2026-09-15", arrived: null },
+    packages: 5,
+    grossWeight: 347.840,
+    pos: [
+      { sku:"Y7-111658", desc:"NZMN3-4-AE630-BT", qty:2,   unit:"EA", po:"PO26001025", delivery:"8818841500" },
+      { sku:"Y7-72894",  desc:"NHI21-PKZ0",       qty:50,  unit:"EA", po:"PO26001025", delivery:"8818841500" },
+      { sku:"Y7-72894",  desc:"NHI21-PKZ0",       qty:128, unit:"EA", po:"PO26001124", delivery:"8818841500" },
+      { sku:"Y7-278841", desc:"FAZ-B6/3",         qty:1,   unit:"EA", po:"PO26001253", delivery:"8818841500" },
+      { sku:"Y7-266755", desc:"NZM2-4-160-XKC",   qty:2,   unit:"EA", po:null,         delivery:"8818841500" },
+      { sku:"Y7-104543", desc:"NZM2-XMVR",        qty:2,   unit:"EA", po:"PO26001088", delivery:"8818841500" },
+
+      { sku:"Y7-278546", desc:"FAZ-C1/1",         qty:15,  unit:"EA", po:"PO26001025", delivery:"8818815242" },
+      { sku:"Y7-278474", desc:"ZB65-XEZ",         qty:2,   unit:"EA", po:"PO26001025", delivery:"8818815242" },
+      { sku:"Y7-111732", desc:"NZMH3-VE630-BT",   qty:1,   unit:"EA", po:"PO26001025", delivery:"8818815242" },
+      { sku:"Y7-82884",  desc:"NHI-E-10-PKZ0",    qty:50,  unit:"EA", po:"PO26001124", delivery:"8818815242" },
+      { sku:"LP-CC-20",  desc:"LOW PEAK CC TIME DELAY", qty:120, unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-278562", desc:"FAZ-C20/1",        qty:60,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-102267", desc:"FAZ-D10/3-NA",     qty:20,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-276427", desc:"DILA-XHI31",       qty:32,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-102242", desc:"FAZ-C4/3-NA",      qty:12,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-190792", desc:"FAZ-C63/3-NA",     qty:22,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-216771", desc:"M22-L-W",          qty:17,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-277770", desc:"DILM40(24V50/60HZ)", qty:20, unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-276585", desc:"DILM7-01(230V50HZ,240V60HZ)", qty:40, unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-277945", desc:"DILM150-XHI20",    qty:20,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-277949", desc:"DILM150-XHI31",    qty:10,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-101459", desc:"BBA4L-63",         qty:10,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-207381", desc:"P3-100/I5",        qty:4,   unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-235447", desc:"PFIM-80/4/003-A-MW", qty:3, unit:"EA", po:"PO26001254", delivery:"8818815242" },
+      { sku:"Y7-102127", desc:"FAZ-C10/1-RT",     qty:20,  unit:"EA", po:"PO26001254", delivery:"8818815242" },
+
+      { sku:"Y7-279142", desc:"FAZ-C25/2-DC",     qty:110, unit:"EA", po:"PO26001025", delivery:"8818801299" },
+      { sku:"Y7-110198", desc:"P1-32/E/SVB",      qty:56,  unit:"EA", po:"PO26001142", delivery:"8818801299" },
+      { sku:"Y7-27012",  desc:"T0-2-1/EZ",        qty:48,  unit:"EA", po:"PO26001149", delivery:"8818801299" },
+      { sku:"Y7-102274", desc:"FAZ-D32/3-NA",     qty:49,  unit:"EA", po:"PO26001123", delivery:"8818801299" },
+      { sku:"Y7-107783", desc:"NZMB2-A200-BT-NA", qty:22,  unit:"EA", po:"PO26001123", delivery:"8818801299" },
+      { sku:"Y7-266773", desc:"NZM2-XIPK",        qty:69,  unit:"EA", po:"PO26001123", delivery:"8818801299" },
+      { sku:"Y7-276427", desc:"DILA-XHI31",       qty:5,   unit:"EA", po:"PO26001123", delivery:"8818801299" },
+      { sku:"Y7-276845", desc:"DILM12-10(24VDC)", qty:16,  unit:"EA", po:"PO26001123", delivery:"8818801299" },
+      { sku:"Y7-278873", desc:"FAZ-C16/3",        qty:70,  unit:"EA", po:"PO26001123", delivery:"8818801299" },
+      { sku:"Y7-400892", desc:"HI11-P1/P3UZ",     qty:13,  unit:"EA", po:"PO26001123", delivery:"8818801299" },
+      { sku:"Y7-72896",  desc:"NHI11-PKZ0",       qty:90,  unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-278551", desc:"FAZ-C3/1",         qty:28,  unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-278867", desc:"FAZ-C6/3",         qty:12,  unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-158331", desc:"SPBT12-280/4",     qty:8,   unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-276880", desc:"DILM12-01(24VDC)", qty:10,  unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-66401",  desc:"EMT6-DB(230V)",    qty:4,   unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-19869",  desc:"T0-2-8231/IVS",    qty:1,   unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-211803", desc:"AZ-3N-C80",        qty:1,   unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-276424", desc:"DILA-XHI04",       qty:10,  unit:"EA", po:"PO26001247", delivery:"8818801299" },
+      { sku:"Y7-203595", desc:"VHI20-PKZ0",       qty:60,  unit:"EA", po:"PO26001249", delivery:"8818801299" },
+      { sku:"Y7-5737",   desc:"T0-1-8200/XZ",     qty:15,  unit:"EA", po:"PO26001025", delivery:"8818801299" },
+      { sku:"Y7-5736",   desc:"T0-1-102/XZ",      qty:12,  unit:"EA", po:"PO26001025", delivery:"8818801299" },
+      { sku:"Y7-13960",  desc:"T0-4-8213/XZ",     qty:5,   unit:"EA", po:"PO26001025", delivery:"8818801299" },
+      { sku:"Y7-226093", desc:"T0-2-8900/XZ",     qty:5,   unit:"EA", po:"PO26001025", delivery:"8818801299" },
+      { sku:"Y7-11744",  desc:"T0-2-8221/XZ",     qty:4,   unit:"EA", po:"PO26001025", delivery:"8818801299" }
+    ]
+  },
+  {
+    pl: "48671447",
+    addedDate: "2026-09-15",
+    plDocDate: "2026-08-12",
+    supplier: "Eaton Industries GmbH",
+    invoice: "4937524142",
+    method: "sea",
+    status: "arrived",
+    statusDates: { pending: null, collected: null, transit: null, arrived: "2026-09-13" },
+    packages: 15,
+    grossWeight: 429.900,
+    pos: [
+      { sku:"Y7-216483", desc:"M22-XBK1",          qty:20,  unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-277050", desc:"DILM17-01(RDC24)",  qty:6,   unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-216564", desc:"M22-LED230-R",      qty:20,  unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-235446", desc:"PFIM-63/4/05-A-MW", qty:8,   unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-239071", desc:"FAZ6-C20/1N",       qty:10,  unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-10304",  desc:"40DILE",            qty:5,   unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-121610", desc:"C22-PVT45P-K11",    qty:10,  unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-216870", desc:"M22-WK3",           qty:8,   unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-278674", desc:"FAZ-C16/1N",        qty:10,  unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-102274", desc:"FAZ-D32/3-NA",      qty:16,  unit:"EA", po:"PO26001149", delivery:"8818717611" },
+      { sku:"Y7-93487",  desc:"DE-T0",             qty:15,  unit:"EA", po:"PO26001149", delivery:"8818717611" },
+
+      { sku:"Y7-60204",  desc:"T0-5-8369/E",       qty:65,  unit:"EA", po:"PO26001025", delivery:"8818732811" },
+      { sku:"Y7-110292", desc:"NZMH2-A125-BT",     qty:5,   unit:"EA", po:"PO26001025", delivery:"8818732811" },
+      { sku:"Y7-276344", desc:"DILA-40(24VDC)",    qty:4,   unit:"EA", po:"PO26001149", delivery:"8818732811" },
+      { sku:"Y7-278798", desc:"FAZ-K16/2",         qty:56,  unit:"EA", po:"PO26001149", delivery:"8818732811" },
+      { sku:"Y7-285557", desc:"PFR-5",             qty:12,  unit:"EA", po:"PO26001149", delivery:"8818732811" },
+      { sku:"Y7-285601", desc:"PFR-W-70",          qty:12,  unit:"EA", po:"PO26001149", delivery:"8818732811" },
+
+      { sku:"Y7-279140", desc:"FAZ-C16/2-DC",      qty:192, unit:"EA", po:"PO26001025", delivery:"8818641497" },
+      { sku:"Y7-109925", desc:"DILMP200(RAC240)",  qty:2,   unit:"EA", po:"PO26001025", delivery:"8818641497" },
+
+      { sku:"Y7-281196", desc:"DILM12-XMV",        qty:360, unit:"EA", po:"PO26001124", delivery:"8818658996" },
+
+      { sku:"Y7-192398", desc:"EMS2-ROS-T-9-24VDC", qty:1,  unit:"EA", po:"PO26001025", delivery:"8818689438" },
+      { sku:"Y7-82881",  desc:"CL-PKZ0",           qty:4,   unit:"EA", po:"PO26001154", delivery:"8818689438" },
+      { sku:"Y7-93487",  desc:"DE-T0",             qty:14,  unit:"EA", po:"PO26001154", delivery:"8818689438" },
+
+      { sku:"Y7-178787", desc:"XN-322-16DO-P05",   qty:4,   unit:"EA", po:"PO26001096", delivery:"8818627991" },
+      { sku:"Y7-179288", desc:"XN-322-8AI-I",      qty:4,   unit:"EA", po:"PO26001096", delivery:"8818627991" },
+      { sku:"Y7-178768", desc:"XN-322-20DI-PF",    qty:6,   unit:"EA", po:"PO26001096", delivery:"8818627991" },
+      { sku:"Y7-178782", desc:"XN-312-GW-CAN",     qty:2,   unit:"EA", po:"PO26001096", delivery:"8818627991" },
+      { sku:"Y7-178791", desc:"XN-322-8AIO-U2",    qty:2,   unit:"EA", po:"PO26001096", delivery:"8818627991" },
+      { sku:"Y7-178790", desc:"XN-322-8AO-U2",     qty:1,   unit:"EA", po:"PO26001096", delivery:"8818627991" },
+      { sku:"Y7-279138", desc:"FAZ-C10/2-DC",      qty:110, unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-279159", desc:"FAZ-PN-C16/1N",     qty:15,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-27044",  desc:"ZAV-T0",            qty:12,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-281196", desc:"DILM12-XMV",        qty:14,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278873", desc:"FAZ-C16/3",         qty:31,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-135178", desc:"CR2020024A",        qty:25,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-93487",  desc:"DE-T0",             qty:16,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-279135", desc:"FAZ-C3/2-DC",       qty:20,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-30851",  desc:"AK-PKZ0",           qty:30,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-216416", desc:"M22-ES-MS1",        qty:15,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-260030", desc:"NZM2-XKS",          qty:14,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-216922", desc:"M22-DL-W",          qty:15,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-248856", desc:"Z-SCH230/63-40",    qty:12,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278674", desc:"FAZ-C16/1N",        qty:15,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-102130", desc:"FAZ-C16/1-RT",      qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278434", desc:"ZB12-0,6",          qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-199909", desc:"P1-40/I2/SVB",      qty:8,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-29353",  desc:"T0-3-8212/E",       qty:15,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-207398", desc:"T0-2-8900/E",       qty:15,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-216710", desc:"M22-DDL-S-X7/X7",   qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-216700", desc:"M22-DDL-GR-X1/X0",  qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-192370", desc:"VLCE22-3P",         qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-74320",  desc:"P3-100/EA/SVB",     qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278565", desc:"FAZ-C40/1",         qty:12,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278756", desc:"FAZ-C10/2",         qty:15,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-19863",  desc:"T0-1-8214/E",       qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278427", desc:"DILM1000-XHI11-SA", qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-216406", desc:"M22-XC-R",          qty:20,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-294010", desc:"DILK20-11(230V50HZ,240V60HZ)", qty:6, unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-121721", desc:"PKE12",             qty:6,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-239071", desc:"FAZ6-C20/1N",       qty:8,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-230961", desc:"M22-DGL-X",         qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-276880", desc:"DILM12-01(24VDC)",  qty:3,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278896", desc:"FAZ-D16/3",         qty:6,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-280987", desc:"NZMB1-A20",         qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278762", desc:"FAZ-C25/2",         qty:4,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-34110",  desc:"T0-2-15432/E",      qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-278798", desc:"FAZ-K16/2",         qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-294076", desc:"DILK50-10(230V50HZ,240V60HZ)", qty:4, unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-263876", desc:"Z-SH/1",            qty:12,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-293988", desc:"DILK12-11(230V50HZ,240V60HZ)", qty:4, unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-136506", desc:"ZEB150-100",        qty:3,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-170616", desc:"FRBMM-C6/1N/003-A", qty:3,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-170617", desc:"FRBMM-C10/1N/003-A", qty:3,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-284411", desc:"NZMH1-A63",         qty:3,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-229749", desc:"FAK-S/KC11/I",      qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-259145", desc:"N1-125",            qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-235446", desc:"PFIM-63/4/05-A-MW", qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-285601", desc:"PFR-W-70",          qty:3,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-44502",  desc:"PKM0-16",           qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-276268", desc:"IS-32/3",           qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-81438",  desc:"P1-32/EA/SVB",      qty:3,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-50974",  desc:"SVA-T3",            qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-67327",  desc:"T0-2-8242/E",       qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-266678", desc:"NZM3-XAVPR",        qty:4,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-116433", desc:"LZMB2-4-A250-I",    qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-118914", desc:"DILMP45-01(230V50HZ,240V60HZ)", qty:2, unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-136504", desc:"ZEB65-100",         qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-283185", desc:"PKZM0-XRM12",       qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-225325", desc:"CI-K2-T3-4",        qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-285557", desc:"PFR-5",             qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-276399", desc:"DILA-22(230V50HZ,240V60HZ)", qty:2, unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-112639", desc:"WFB-SET-CS",        qty:4,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-109690", desc:"NZMC3-4-A400",      qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-111877", desc:"LZMB1-4-A160-I",    qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-147395", desc:"NZMN2-4-A250-BT",   qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-216445", desc:"M22-XDL-B",         qty:10,  unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-266641", desc:"NZM1-XS-L",         qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-276729", desc:"DILM9-01(24V50/60HZ)", qty:1, unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-266783", desc:"NZM3-4-XKC",        qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-107020", desc:"DILM150-XMVE",      qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-284922", desc:"Z-EL/G230",         qty:5,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-265283", desc:"Z-S230/SO",         qty:2,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+      { sku:"Y7-50712",  desc:"T0-4-8223/E",       qty:1,   unit:"EA", po:"PO26001025", delivery:"8818627991" },
+
+      { sku:"Y7-10304",  desc:"40DILE",            qty:15,  unit:"EA", po:"PO26001025", delivery:"8818703859" },
+      { sku:"Y7-121610", desc:"C22-PVT45P-K11",    qty:18,  unit:"EA", po:"PO26001154", delivery:"8818703859" },
+      { sku:"Y7-651",    desc:"N-P1E",             qty:615, unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-102250", desc:"FAZ-C16/3-NA",      qty:24,  unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-276550", desc:"DILM7-10(230V50HZ,240V60HZ)", qty:150, unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-278551", desc:"FAZ-C3/1",          qty:75,  unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-278847", desc:"FAZ-B16/3",         qty:8,   unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-276832", desc:"DILM12-10(400V50HZ,440V60HZ)", qty:4, unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"C10G32",    desc:"CYLINDRICAL FUSE 10x38 32A GG 400V AC", qty:10, unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-192396", desc:"EMS2-RO-T-9-24VDC", qty:2,   unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-276985", desc:"DILMP20(24VDC)",    qty:2,   unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-277952", desc:"DILM150-XHI04",     qty:5,   unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-259651", desc:"NZM2/3-XUHIV20208-240AC", qty:1, unit:"EA", po:"PO26001142", delivery:"8818703859" },
+      { sku:"Y7-62577",  desc:"T0-6-8370/E",       qty:1,   unit:"EA", po:"PO26001142", delivery:"8818703859" },
+
+      { sku:"Y7-184219", desc:"IZMX-MIL-CAB1830-1", qty:1,  unit:"EA", po:"PO26001142", delivery:"8818703861" },
+      { sku:"Y7-139550", desc:"DILM225A/22(RDC24)", qty:1,  unit:"EA", po:"PO26001142", delivery:"8818703861" }
+    ]
+  },
+  {
+    pl: "48779122",
+    addedDate: "2026-09-15",
+    plDocDate: "2026-08-27",
+    supplier: "Eaton Industries GmbH",
+    invoice: null,
+    method: "express",
+    status: "collected",
+    statusDates: { pending: "2026-09-15", collected: "2026-09-08", transit: null, arrived: null },
+    packages: 1,
+    grossWeight: 8.010,
+    pos: [
+      { sku:"Y7-170773", desc:"FRBMM-C32/3/003-A", qty:18, unit:"EA", po:"PO26001289", delivery:"8818897584" }
+    ]
+  },
+  {
+    pl: "48779121",
+    addedDate: "2026-09-15",
+    plDocDate: "2026-09-04",
+    supplier: "Eaton Industries GmbH",
+    invoice: "4937542761",
+    method: "sea",
+    status: "pending",
+    statusDates: { pending: "2026-09-15", collected: null, transit: null, arrived: null },
+    packages: 3,
+    grossWeight: 70.170,
+    pos: [
+      { sku:"Y7-92394",  desc:"T5B-3-7/E",              qty:2, unit:"EA", po:"PO26001025", delivery:"8818855303" },
+      { sku:"Y7-183941", desc:"IZMX-CAS163-1600-SEC-1", qty:2, unit:"EA", po:"PO26001142", delivery:"8818745705" },
+      { sku:"Y7-111979", desc:"LZMN4-AE1000-I",         qty:1, unit:"EA", po:"PO26001025", delivery:"8818627992" }
+    ]
+  }
+];
+
+// ---- עזרי תאריך ----
+function todayISO(){ const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+function parseISO(s){ if(!s) return null; const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
+function addDays(date, n){ const d=new Date(date); d.setDate(d.getDate()+n); return d; }
+function fmt(date){ if(!date) return ""; const dd=String(date.getDate()).padStart(2,"0"); const mm=String(date.getMonth()+1).padStart(2,"0"); return `${dd}/${mm}/${date.getFullYear()}`; }
+function daysSince(dateStr){ if(!dateStr) return null; const d=parseISO(dateStr); return Math.floor((todayISO()-d)/86400000); }
+
+function effectiveStatus(rec){
+  // באקספרס אין בפועל שלב "נאסף" נפרד מ"בדרך" - ברגע שנאסף הוא כבר בדרך לארץ.
+  if(rec.method === "express" && rec.status === "collected") return "transit";
+  return rec.status;
+}
+function estArrival(rec){
+  // באקספרס סופרים מתאריך האיסוף (אין בד"כ עדכון נפרד על "בדרך"); בהטסה/ים סופרים מתאריך "בדרך לישראל".
+  if(rec.method === "express"){
+    if(!rec.statusDates.collected) return null;
+    return addDays(parseISO(rec.statusDates.collected), METHOD_DAYS.express);
+  }
+  if(!rec.statusDates.transit) return null;
+  return addDays(parseISO(rec.statusDates.transit), METHOD_DAYS[rec.method]);
+}
+function isOverdue(rec){
+  if(rec.status==="pending" || rec.status==="arrived") return false;
+  const eta=estArrival(rec);
+  return eta && todayISO()>eta;
+}
+function isArchived(rec){
+  return rec.status==="arrived" && daysSince(rec.statusDates.arrived) >= ARCHIVE_AFTER_DAYS;
+}
+
+// ---- רינדור ----
+let currentTab="active";
+
+
+function matchesSearch(rec, q){
+  if(!q) return true;
+  q=q.trim().toLowerCase();
+  if(rec.pl.toLowerCase().includes(q)) return true;
+  for(const p of rec.pos){
+    if(p.sku && p.sku.toLowerCase().includes(q)) return true;
+    if(p.po && p.po.toLowerCase().includes(q)) return true;
+    if(p.delivery && p.delivery.toLowerCase().includes(q)) return true;
+  }
+  return false;
+}
+
+function renderKPIs(activeRecs){
+  const counts={pending:0,collected:0,transit:0,arrived:0};
+  let overdue=0;
+  activeRecs.forEach(r=>{ counts[effectiveStatus(r)]++; if(isOverdue(r)) overdue++; });
+  const kpis=[
+    {cls:"", num:activeRecs.length, lbl:"סה\"כ פעילים"},
+    {cls:"pending", num:counts.pending, lbl:STATUS_LABELS.pending},
+    {cls:"collected", num:counts.collected, lbl:STATUS_LABELS.collected},
+    {cls:"transit", num:counts.transit, lbl:STATUS_LABELS.transit},
+    {cls:"arrived", num:counts.arrived, lbl:STATUS_LABELS.arrived},
+    {cls:"overdue", num:overdue, lbl:"בעיכוב מול הגעה משוערת"}
+  ];
+  document.getElementById("kpis").innerHTML = kpis.map(k=>`
+    <div class="kpi ${k.cls}"><div class="num">${k.num}</div><div class="lbl">${k.lbl}</div></div>
+  `).join("");
+}
+
+function renderTable(){
+  const q=document.getElementById("search").value.trim();
+  const active = RECORDS.filter(r=>!isArchived(r));
+  const history = RECORDS.filter(r=>isArchived(r));
+  renderKPIs(active);
+
+  // כשיש חיפוש, מציגים תוצאות משני הטאבים גם יחד (מק"ט/הזמנת רכש/DELIVERY עלולים להופיע
+  // גם במשלוח פעיל וגם במשלוח שכבר עבר להיסטוריה) - עם תגית שמציינת לאיזו רשימה כל שורה שייכת.
+  const searching = q.length>0;
+  const base = searching ? RECORDS : (currentTab==="active" ? active : history);
+  const list = base.filter(r=>matchesSearch(r,q)).map(r=>({rec:r, inHistory:isArchived(r)}));
+
+  const tbody=document.getElementById("tbody");
+  const emptyMsg=document.getElementById("emptyMsg");
+
+  if(list.length===0){
+    tbody.innerHTML="";
+    emptyMsg.style.display="block";
+    return;
+  }
+  emptyMsg.style.display="none";
+
+  tbody.innerHTML = list.map(({rec:r, inHistory})=>{
+    const eta=estArrival(r);
+    const overdue=isOverdue(r);
+    let etaCell;
+    if(r.status==="arrived"){
+      etaCell = `<span style="color:var(--green);font-weight:600;">${fmt(parseISO(r.statusDates.arrived))}</span>`;
+    } else if(eta){
+      etaCell = fmt(eta) + (overdue?' <span class="overdue-tag">בעיכוב</span>':'');
+    } else {
+      etaCell = '<span class="muted">—</span>';
+    }
+    return `
+    <tr class="row" data-key="${r.pl}">
+      <td>▸</td>
+      <td class="pl">${r.pl}${searching ? `<div class="muted">${inHistory?"מ-היסטוריה":"פעיל"}</div>` : ""}</td>
+      <td><span class="method">${METHOD_LABELS[r.method]}</span></td>
+      <td><span class="badge ${effectiveStatus(r)}">${STATUS_LABELS[effectiveStatus(r)]}</span></td>
+      <td>${etaCell}</td>
+    </tr>
+    <tr class="detail-row" id="detail-${r.pl}" style="display:none;">
+      <td colspan="5">
+        <div class="detail-wrap">
+          <table class="detail-table">
+            <thead><tr><th>מק"ט</th><th>תיאור</th><th>כמות</th><th>הזמנת רכש</th><th>DELIVERY</th></tr></thead>
+            <tbody>
+              ${r.pos.map(p=>`<tr><td>${p.sku}</td><td>${p.desc||""}</td><td>${p.qty} ${p.unit||""}</td><td>${p.po||"מלאי"}</td><td>${p.delivery||""}</td></tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </td>
+    </tr>
+    `;
+  }).join("");
+
+  tbody.querySelectorAll("tr.row").forEach(tr=>{
+    tr.addEventListener("click", ()=>{
+      const key=tr.getAttribute("data-key");
+      const det=document.getElementById(`detail-${key}`);
+      det.style.display = det.style.display==="none" ? "table-row" : "none";
+    });
+  });
+}
+
+document.querySelectorAll(".tab").forEach(t=>{
+  t.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active");
+    currentTab=t.getAttribute("data-tab");
+    renderTable();
+  });
+});
+document.getElementById("search").addEventListener("input", renderTable);
+
+renderTable();
+</script>
+</body>
+</html>
