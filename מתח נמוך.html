@@ -12,6 +12,7 @@
     --purple:#7c3aed; --purple-bg:#f2eafe;
     --green:#15803d; --green-bg:#e7f7ec;
     --red:#dc2626; --red-bg:#fdeaea;
+    --teal:#0f766e; --teal-bg:#ccfbf1;
     --shadow:0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.04);
   }
   *{box-sizing:border-box;}
@@ -25,6 +26,7 @@
   .kpi.pending .num{color:var(--amber);}
   .kpi.collected .num{color:var(--blue);}
   .kpi.transit .num{color:var(--purple);}
+  .kpi.release .num{color:var(--teal);}
   .kpi.arrived .num{color:var(--green);}
   .kpi.overdue .num{color:var(--red);}
   .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
@@ -43,6 +45,7 @@
   .badge.pending{background:var(--amber-bg);color:var(--amber);}
   .badge.collected{background:var(--blue-bg);color:var(--blue);}
   .badge.transit{background:var(--purple-bg);color:var(--purple);}
+  .badge.release{background:var(--teal-bg);color:var(--teal);}
   .badge.arrived{background:var(--green-bg);color:var(--green);}
   .method{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);}
   .pl{font-weight:700;}
@@ -91,7 +94,7 @@
 </div>
 
 <footer>
-  הכלי מתעדכן ידנית: שורה חדשה נוספת עם כל פקינג ליסט שמועבר, והסטטוס מתעדכן לפי עדכונים בצ'אט (נאסף / בדרך לישראל / הגיע).
+  הכלי מתעדכן ידנית: שורה חדשה נוספת עם כל פקינג ליסט שמועבר, והסטטוס מתעדכן לפי עדכונים בצ'אט (נאסף / בדרך לישראל / בתהליך שחרור / הגיע).
   תאריך הגעה משוער: בהטסה 10 ימים וים 21 ימים מהתאריך שבו עודכן כי המשלוח "בדרך לישראל"; באקספרס 7 ימים מתאריך האיסוף.
   שורות שהגיעו עוברות אוטומטית ללשונית ההיסטוריה 7 ימים לאחר סטטוס "הגיע".
 </footer>
@@ -100,7 +103,7 @@
 // ---- שיטות הובלה וסטטוסים ----
 const METHOD_LABELS = { air:"הטסה", express:"אקספרס", sea:"ים" };
 const METHOD_DAYS   = { air:10, express:7, sea:21 };
-const STATUS_LABELS = { pending:"ממתין לאיסוף", collected:"נאסף", transit:"בדרך לישראל", arrived:"הגיע" };
+const STATUS_LABELS = { pending:"ממתין לאיסוף", collected:"נאסף", transit:"בדרך לישראל", release:"בתהליך שחרור", arrived:"הגיע" };
 const ARCHIVE_AFTER_DAYS = 7;
 
 // ---- נתונים ----
@@ -113,8 +116,7 @@ const RECORDS = [
     supplier: "Eaton Industries GmbH",
     invoice: "4937547534",
     method: "air",
-    status: "transit",
-    statusNote: "בתהליך שחרור",
+    status: "release",
     statusDates: { pending: "2026-09-15", collected: "2026-09-05", transit: "2026-09-05", arrived: null },
     packages: 8,
     grossWeight: 77.472,
@@ -172,8 +174,7 @@ const RECORDS = [
     supplier: "Eaton Industries GmbH",
     invoice: null,
     method: "express",
-    status: "transit",
-    statusNote: "בתהליך שחרור",
+    status: "release",
     statusDates: { pending: "2026-09-15", collected: "2026-09-15", transit: "2026-09-15", arrived: null },
     packages: 5,
     grossWeight: 347.840,
@@ -379,8 +380,7 @@ const RECORDS = [
     supplier: "Eaton Industries GmbH",
     invoice: null,
     method: "express",
-    status: "collected",
-    statusNote: "בתהליך שחרור",
+    status: "release",
     statusDates: { pending: "2026-09-15", collected: "2026-09-08", transit: null, arrived: null },
     packages: 1,
     grossWeight: 8.010,
@@ -457,7 +457,7 @@ function matchesSearch(rec, q){
 }
 
 function renderKPIs(activeRecs){
-  const counts={pending:0,collected:0,transit:0,arrived:0};
+  const counts={pending:0,collected:0,transit:0,release:0,arrived:0};
   let overdue=0;
   activeRecs.forEach(r=>{ counts[effectiveStatus(r)]++; if(isOverdue(r)) overdue++; });
   const kpis=[
@@ -465,6 +465,7 @@ function renderKPIs(activeRecs){
     {cls:"pending", num:counts.pending, lbl:STATUS_LABELS.pending},
     {cls:"collected", num:counts.collected, lbl:STATUS_LABELS.collected},
     {cls:"transit", num:counts.transit, lbl:STATUS_LABELS.transit},
+    {cls:"release", num:counts.release, lbl:STATUS_LABELS.release},
     {cls:"arrived", num:counts.arrived, lbl:STATUS_LABELS.arrived},
     {cls:"overdue", num:overdue, lbl:"בעיכוב מול הגעה משוערת"}
   ];
