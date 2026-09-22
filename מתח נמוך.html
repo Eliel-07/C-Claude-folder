@@ -114,6 +114,7 @@ const RECORDS = [
     invoice: "4937547534",
     method: "air",
     status: "transit",
+    statusNote: "בתהליך שחרור",
     statusDates: { pending: "2026-09-15", collected: "2026-09-05", transit: "2026-09-05", arrived: null },
     packages: 8,
     grossWeight: 77.472,
@@ -139,8 +140,9 @@ const RECORDS = [
     supplier: "Eaton Industries GmbH",
     invoice: "4937547535",
     method: "air",
-    status: "collected",
-    statusDates: { pending: "2026-09-15", collected: "2026-09-05", transit: null, arrived: null },
+    status: "transit",
+    manualEta: "2026-09-24",
+    statusDates: { pending: "2026-09-15", collected: "2026-09-05", transit: "2026-09-22", arrived: null },
     packages: 2,
     grossWeight: 330.000,
     pos: [
@@ -171,6 +173,7 @@ const RECORDS = [
     invoice: null,
     method: "express",
     status: "transit",
+    statusNote: "בתהליך שחרור",
     statusDates: { pending: "2026-09-15", collected: "2026-09-15", transit: "2026-09-15", arrived: null },
     packages: 5,
     grossWeight: 347.840,
@@ -377,6 +380,7 @@ const RECORDS = [
     invoice: null,
     method: "express",
     status: "collected",
+    statusNote: "בתהליך שחרור",
     statusDates: { pending: "2026-09-15", collected: "2026-09-08", transit: null, arrived: null },
     packages: 1,
     grossWeight: 8.010,
@@ -391,8 +395,9 @@ const RECORDS = [
     supplier: "Eaton Industries GmbH",
     invoice: "4937542761",
     method: "sea",
-    status: "pending",
-    statusDates: { pending: "2026-09-15", collected: null, transit: null, arrived: null },
+    status: "collected",
+    manualEta: "2026-10-11",
+    statusDates: { pending: "2026-09-15", collected: "2026-09-22", transit: null, arrived: null },
     packages: 3,
     grossWeight: 70.170,
     pos: [
@@ -416,6 +421,8 @@ function effectiveStatus(rec){
   return rec.status;
 }
 function estArrival(rec){
+  // תאריך הגעה משוער ידני (נקבע ידנית בצ'אט) - גובר על החישוב האוטומטי.
+  if(rec.manualEta) return parseISO(rec.manualEta);
   // באקספרס סופרים מתאריך האיסוף (אין בד"כ עדכון נפרד על "בדרך"); בהטסה/ים סופרים מתאריך "בדרך לישראל".
   if(rec.method === "express"){
     if(!rec.statusDates.collected) return null;
@@ -504,7 +511,7 @@ function renderTable(){
       <td>▸</td>
       <td class="pl">${r.pl}${searching ? `<div class="muted">${inHistory?"מ-היסטוריה":"פעיל"}</div>` : ""}</td>
       <td><span class="method">${METHOD_LABELS[r.method]}</span></td>
-      <td><span class="badge ${effectiveStatus(r)}">${STATUS_LABELS[effectiveStatus(r)]}</span></td>
+      <td><span class="badge ${effectiveStatus(r)}">${STATUS_LABELS[effectiveStatus(r)]}</span>${r.statusNote ? `<div class="muted">${r.statusNote}</div>` : ""}</td>
       <td>${etaCell}</td>
     </tr>
     <tr class="detail-row" id="detail-${r.pl}" style="display:none;">
